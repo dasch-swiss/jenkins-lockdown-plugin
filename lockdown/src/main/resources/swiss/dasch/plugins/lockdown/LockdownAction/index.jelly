@@ -1,0 +1,70 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form" xmlns:i="jelly:fmt">
+  <l:layout title="${%Lockdown}">
+    <st:include page="sidepanel.jelly" it="${it.job}" />
+    <l:main-panel>
+      <script type="text/javascript">
+        function ShowPopup(hoveritem) {
+          var hp = document.getElementById("lockdownHoverPopup");
+          hp.style.display = "block";
+        }
+        function HidePopup() {
+          var hp = document.getElementById("lockdownHoverPopup");
+          hp.style.display = "none";
+          var action = <st:bind value="${it}" />;
+        }
+      </script>
+      <h1 class="page-headline">
+        <l:icon class="icon-lock icon-xlg"/>
+        <span class="jenkins-icon-adjacent">
+          ${%Lockdown}
+        </span>
+      </h1>
+      <j:if test="${it.lockdownState.lockedDown}">
+        <p>
+          ${%CurrentlyLockedDown}
+        </p>
+        <p>
+          ${%LockdownReason} ${it.lockdownState.lockdownReason}
+        </p>
+        <p>
+          ${%LockedDownBy} ${it.lockdownState.lockedDownByUserName} (${it.lockdownState.lockedDownByUserId})
+        </p>
+        <j:if test="${h.hasPermission(it.STOP_LOCKDOWN)}">
+          <p>
+    	    <f:form method="post" action="stopLockdown" name="stopLockdown">
+              <f:submit value="${%Action.StopLockdown}" />
+            </f:form>
+          </p>
+        </j:if>
+      </j:if>
+      <j:if test="${!it.lockdownState.lockedDown}">
+        <p>
+          ${%CurrentlyNotLockedDown}
+        </p>
+        <j:if test="${it.job.disabled}">
+          <p>
+            ${%NoLockdownDueToDisabled}
+          </p>
+        </j:if>
+        <j:if test="${!it.job.disabled and h.hasPermission(it.START_LOCKDOWN)}">
+          <p>
+            <a id="startLockdown" href="#" onClick="ShowPopup(this); return false;">${%Action.StartLockdown}</a>
+          </p>
+          <div id="lockdownHoverPopup" style="display:none; width:500px; z-index:1000; border:1px solid #bbb;">
+            <f:form method="post" action="startLockdown" name="startLockdown">
+              <f:entry title="${%Action.LockdownReason}">
+                <f:textarea name="reason" id="reason" />
+              </f:entry>
+              <f:block>
+                <div align="right">
+                  <f:submit value="${%Action.StartLockdown}" />
+                </div>
+              </f:block>
+            </f:form>
+          </div>
+        </j:if>
+      </j:if>
+    </l:main-panel>
+  </l:layout>
+</j:jelly>

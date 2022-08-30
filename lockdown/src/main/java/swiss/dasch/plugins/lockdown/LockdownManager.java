@@ -1,0 +1,302 @@
+package swiss.dasch.plugins.lockdown;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
+
+import org.jenkinsci.Symbol;
+import org.kohsuke.stapler.DataBoundSetter;
+import org.kohsuke.stapler.StaplerRequest;
+import org.kohsuke.stapler.export.Exported;
+import org.kohsuke.stapler.export.ExportedBean;
+
+import hudson.AbortException;
+import hudson.BulkChange;
+import hudson.Extension;
+import hudson.Util;
+import hudson.model.Job;
+import hudson.model.User;
+import jenkins.model.GlobalConfiguration;
+import jenkins.model.Jenkins;
+import jenkins.model.ParameterizedJobMixIn.ParameterizedJob;
+import net.sf.json.JSONObject;
+
+@ExportedBean(defaultVisibility = 2)
+@Symbol("lockdown")
+@Extension
+public class LockdownManager extends GlobalConfiguration {
+
+	private static final Logger LOGGER = Logger.getLogger(LockdownManager.class.getName());
+
+	private String lockdownMessageTemplate;
+	private String jobMessageTemplate;
+	private boolean useSystemMessage;
+
+	// These are not manually configurable but are persisted
+	private String lockdownMessage;
+	private boolean systemMessageSet;
+	private String lastSystemMessage;
+
+	public LockdownManager() {
+		this.resetProperties();
+		this.load();
+	}
+
+	private void resetProperties() {
+		this.lockdownMessageTemplate = null;
+		this.jobMessageTemplate = null;
+		this.useSystemMessage = true;
+	}
+
+	public String getLockdownMessageTemplate() {
+		return this.lockdownMessageTemplate;
+	}
+
+	@DataBoundSetter
+	public void setLockdownMessageTemplate(String template) {
+		this.lockdownMessageTemplate = template;
+	}
+
+	public String getJobMessageTemplate() {
+		return this.jobMessageTemplate;
+	}
+
+	@DataBoundSetter
+	public void setJobMessageTemplate(String template) {
+		this.jobMessageTemplate = template;
+	}
+
+	public boolean getUseSystemMessage() {
+		return this.useSystemMessage;
+	}
+
+	@DataBoundSetter
+	public void setUseSystemMessage(boolean use) {
+		this.useSystemMessage = use;
+	}
+
+	@Exported
+	public String getLockdownMessage() {
+		return this.lockdownMessage;
+	}
+
+	@Exported
+	public String getFormattedLockdownMessage() {
+		try {
+			return this.lockdownMessage == null ? null
+					: Jenkins.get().getMarkupFormatter().translate(this.lockdownMessage);
+		} catch (IOException | IllegalStateException e) {
+			return null;
+		}
+	}
+
+	public void setLockdownMessage(String message) {
+		this.lockdownMessage = message;
+	}
+
+	public boolean getSystemMessageSet() {
+		return this.systemMessageSet;
+	}
+
+	public void setSystemMessageSet(boolean set) {
+		this.systemMessageSet = set;
+	}
+
+	public String getLastSystemMessage() {
+		return this.lastSystemMessage;
+	}
+
+	public void setLastSystemMessage(String message) {
+		this.lastSystemMessage = message;
+	}
+
+	public boolean startLockdown(Job<?, ?> job, String userId, String reason) {
+		return this.startLockdown(job, userId, null, reason);
+	}
+
+	public synchronized boolean startLockdown(Job<?, ?> job, String userId, String usernameOverride, String reason) {
+		ParameterizedJob<?, ?> paramJob = job instanceof ParameterizedJob ? (ParameterizedJob<?, ?>) job : null;
+
+		LockdownStateProperty property = job.getProperty(LockdownStateProperty.class);
+
+		if (property != null && !property.getLockedDown() && (paramJob == null || !paramJob.isDisabled())
+				&& this.isLockdownPluginEnabled(job)) {
+			User user = User.get(userId, false, Collections.emptyMap());
+			String userName = usernameOverride != null ? usernameOverride
+					: user != null ? user.getDisplayName() : userId;
+
+			if (paramJob != null) {
+				try {
+					paramJob.makeDisabled(true);
+				} catch (IOException e) {
+					LOGGER.log(Level.SEVERE, "Failed starting lockdown because job could not be disabled.", e);
+				}
+			}
+
+			property.setLockedDown(true);
+			property.setLockdownReason(reason);
+			property.setLockedDownByUser(userId, userName);
+
+			try {
+				job.save();
+			} catch (IOException e) {
+				LOGGER.log(Level.SEVERE, "Failed saving job.", e);
+			}
+
+			LockdownStateListener.all().forEach(l -> l.onLockdownStateChanged(job, true));
+
+			return true;
+		}
+
+		return false;
+	}
+
+	public boolean stopLockdown(Job<?, ?> job) {
+		return this.stopLockdown(job, true);
+	}
+
+	public synchronized boolean stopLockdown(Job<?, ?> job, boolean checkForPluginEnabled) {
+		ParameterizedJob<?, ?> paramJob = job instanceof ParameterizedJob ? (ParameterizedJob<?, ?>) job : null;
+
+		LockdownStateProperty property = job.getProperty(LockdownStateProperty.class);
+
+		if (property != null && property.getLockedDown()
+				&& (!checkForPluginEnabled || this.isLockdownPluginEnabled(job))) {
+			if (paramJob != null) {
+				try {
+					paramJob.makeDisabled(false);
+				} catch (IOException e) {
+					LOGGER.log(Level.SEVERE, "Failed stopping lockdown because job could not be enabled.", e);
+				}
+			}
+			property.setLockedDown(false);
+
+			try {
+				job.save();
+			} catch (IOException e) {
+				LOGGER.log(Level.SEVERE, "Failed saving job.", e);
+			}
+
+			LockdownStateListener.all().forEach(l -> l.onLockdownStateChanged(job, false));
+
+			return true;
+		}
+
+		return false;
+	}
+
+	public boolean performLockdownStep(Job<?, ?> job, LockdownStepConfig config) throws AbortException {
+		if (!LockdownManager.get().isLockdownPluginEnabled(job)) {
+			throw new AbortException(
+					"Cannot start or stop lockdown because the lockdown plugin is not enabled for this job.");
+		}
+
+		boolean isLockedDown = LockdownManager.get().isLockedDown(job);
+
+		boolean isJobDisabled = job instanceof ParameterizedJob ? ((ParameterizedJob<?, ?>) job).isDisabled() : false;
+
+		boolean changed = false;
+
+		if (config.getStart()) {
+			changed = LockdownManager.get().startLockdown(job, Jenkins.ANONYMOUS2.getName(), "LockdownStep",
+					config.getReason() != null ? config.getReason() : "");
+
+			if (!changed && config.getAbortOnFail()) {
+				throw new AbortException(
+						"Failed starting lockdown" + (isLockedDown ? " because this job is already locked down."
+								: isJobDisabled ? " because this job is already disabled." : "."));
+			}
+		} else {
+			changed = LockdownManager.get().stopLockdown(job);
+
+			if (!changed && config.getAbortOnFail()) {
+				throw new AbortException("Failed stopping lockdown"
+						+ (!isLockedDown ? " because this job is not yet locked down." : "."));
+			}
+		}
+
+		return changed;
+	}
+
+	public synchronized boolean isLockedDown(Job<?, ?> job) {
+		LockdownStateProperty property = job.getProperty(LockdownStateProperty.class);
+		return property != null && property.getLockedDown() && this.isLockdownPluginEnabled(job);
+	}
+
+	public boolean isLockdownPluginEnabled(Job<?, ?> job) {
+		LockdownJobProperty property = job.getProperty(LockdownJobProperty.class);
+		return property != null ? property.getEnabled() : false;
+	}
+
+	@Exported
+	public boolean hasLockdowns() {
+		return Util.createSubList(Jenkins.get().getItems(), Job.class).stream()
+				.map(p -> p.getAction(LockdownAction.class)).filter(a -> a != null
+						&& a.getLockdownState().getLockedDown() && this.isLockdownPluginEnabled(a.getJob()))
+				.findAny().isPresent();
+	}
+
+	@Exported
+	public List<LockdownAction> getLockdowns() {
+		return Util.createSubList(Jenkins.get().getItems(), Job.class).stream()
+				.map(p -> p.getAction(LockdownAction.class)).filter(a -> a != null
+						&& a.getLockdownState().getLockedDown() && this.isLockdownPluginEnabled(a.getJob()))
+				.collect(Collectors.toList());
+	}
+
+	public String renderLockdownMessage() {
+		List<LockdownAction> lockdowns = this.getLockdowns();
+
+		if (!lockdowns.isEmpty()) {
+			StringBuilder jobMessage = new StringBuilder();
+
+			for (LockdownAction lockdown : lockdowns) {
+				jobMessage.append(this.renderJobMessage(lockdown.getJob(), lockdown));
+			}
+
+			return this.lockdownMessageTemplate.replaceAll(getPattern("jobs"), jobMessage.toString());
+		}
+
+		return "";
+	}
+
+	public String renderJobMessage(Job<?, ?> job, LockdownAction lockdown) {
+		if (this.jobMessageTemplate != null) {
+			return this.jobMessageTemplate.replaceAll(getPattern("name"), job.getDisplayName())
+					.replaceAll(getPattern("fullname"), job.getFullName())
+					.replaceAll(getPattern("description"), job.getDescription())
+					.replaceAll(getPattern("url"), job.getAbsoluteUrl())
+					.replaceAll(getPattern("reason"), lockdown.getLockdownState().getLockdownReason())
+					.replaceAll(getPattern("username"), lockdown.getLockdownState().getLockedDownByUserName())
+					.replaceAll(getPattern("userid"), lockdown.getLockdownState().getLockedDownByUserId());
+		}
+		return "";
+	}
+
+	private static String getPattern(String key) {
+		return String.format("\\{%%\\s*%s\\s*%%\\}", key);
+	}
+
+	@Override
+	public boolean configure(StaplerRequest req, JSONObject json) {
+		this.resetProperties();
+
+		try (BulkChange bc = new BulkChange(this)) {
+			req.bindJSON(this, json);
+			bc.commit();
+		} catch (IOException ex) {
+			LOGGER.log(Level.WARNING, "Exception during BulkChange.", ex);
+			return false;
+		}
+
+		return true;
+	}
+
+	public static LockdownManager get() {
+		return (LockdownManager) Jenkins.get().getDescriptorOrDie(LockdownManager.class);
+	}
+
+}
