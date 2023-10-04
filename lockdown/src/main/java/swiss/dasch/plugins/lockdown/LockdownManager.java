@@ -2,7 +2,10 @@ package swiss.dasch.plugins.lockdown;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -18,6 +21,7 @@ import hudson.BulkChange;
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.Job;
+import hudson.model.TopLevelItem;
 import hudson.model.User;
 import jenkins.model.GlobalConfiguration;
 import jenkins.model.Jenkins;
@@ -39,16 +43,58 @@ public class LockdownManager extends GlobalConfiguration {
 	private String lockdownMessage;
 	private boolean systemMessageSet;
 	private String lastSystemMessage;
+	private Map<String, LockdownState> lockdownStates = new HashMap<>();
 
 	public LockdownManager() {
 		this.resetProperties();
 		this.load();
 	}
 
-	private void resetProperties() {
+	private synchronized LockdownState getOrCreateLockdownState(String job, boolean create) {
+		LockdownState state = this.lockdownStates.get(job);
+		if (state == null && create) {
+			this.lockdownStates.put(job, state = new LockdownState());
+		}
+		return state;
+	}
+
+	private LockdownState getOrCreateLockdownState(Job<?, ?> job, boolean create) {
+		return this.getOrCreateLockdownState(job.getFullName(), create);
+	}
+
+	public ILockdownState getLockdownState(Job<?, ?> job) {
+		return this.getOrCreateLockdownState(job, false);
+	}
+
+	public synchronized boolean deleteStaleLockdownStates() {
+		Jenkins jenkins = Jenkins.get();
+
+		boolean changed = false;
+
+		Iterator<String> it = this.lockdownStates.keySet().iterator();
+		while (it.hasNext()) {
+			String job = it.next();
+
+			TopLevelItem item = jenkins.getItem(job);
+
+			if (item instanceof Job == false) {
+				it.remove();
+				changed = true;
+			}
+		}
+
+		if (changed) {
+			this.save();
+		}
+
+		return changed;
+	}
+
+	private synchronized void resetProperties() {
 		this.lockdownMessageTemplate = null;
 		this.jobMessageTemplate = null;
 		this.useSystemMessage = true;
+		this.lockdownStates = new HashMap<>();
 	}
 
 	public String getLockdownMessageTemplate() {
@@ -120,9 +166,9 @@ public class LockdownManager extends GlobalConfiguration {
 	public synchronized boolean startLockdown(Job<?, ?> job, String userId, String usernameOverride, String reason) {
 		ParameterizedJob<?, ?> paramJob = job instanceof ParameterizedJob ? (ParameterizedJob<?, ?>) job : null;
 
-		LockdownStateProperty property = job.getProperty(LockdownStateProperty.class);
+		LockdownState state = this.getOrCreateLockdownState(job, true);
 
-		if (property != null && !property.getLockedDown() && (paramJob == null || !paramJob.isDisabled())
+		if (!state.getLockedDown() && (paramJob == null || !paramJob.isDisabled())
 				&& this.isLockdownPluginEnabled(job)) {
 			User user = User.get(userId, false, Collections.emptyMap());
 			String userName = usernameOverride != null ? usernameOverride
@@ -136,15 +182,17 @@ public class LockdownManager extends GlobalConfiguration {
 				}
 			}
 
-			property.setLockedDown(true);
-			property.setLockdownReason(reason);
-			property.setLockedDownByUser(userId, userName);
+			state.setLockedDown(true);
+			state.setLockdownReason(reason);
+			state.setLockedDownByUser(userId, userName);
 
 			try {
 				job.save();
 			} catch (IOException e) {
 				LOGGER.log(Level.SEVERE, "Failed saving job.", e);
 			}
+
+			this.save();
 
 			LockdownStateListener.all().forEach(l -> l.onLockdownStateChanged(job, true));
 
@@ -161,10 +209,9 @@ public class LockdownManager extends GlobalConfiguration {
 	public synchronized boolean stopLockdown(Job<?, ?> job, boolean checkForPluginEnabled) {
 		ParameterizedJob<?, ?> paramJob = job instanceof ParameterizedJob ? (ParameterizedJob<?, ?>) job : null;
 
-		LockdownStateProperty property = job.getProperty(LockdownStateProperty.class);
+		LockdownState state = this.getOrCreateLockdownState(job, false);
 
-		if (property != null && property.getLockedDown()
-				&& (!checkForPluginEnabled || this.isLockdownPluginEnabled(job))) {
+		if (state != null && state.getLockedDown() && (!checkForPluginEnabled || this.isLockdownPluginEnabled(job))) {
 			if (paramJob != null) {
 				try {
 					paramJob.makeDisabled(false);
@@ -172,13 +219,15 @@ public class LockdownManager extends GlobalConfiguration {
 					LOGGER.log(Level.SEVERE, "Failed stopping lockdown because job could not be enabled.", e);
 				}
 			}
-			property.setLockedDown(false);
+			state.setLockedDown(false);
 
 			try {
 				job.save();
 			} catch (IOException e) {
 				LOGGER.log(Level.SEVERE, "Failed saving job.", e);
 			}
+
+			this.save();
 
 			LockdownStateListener.all().forEach(l -> l.onLockdownStateChanged(job, false));
 
@@ -222,8 +271,8 @@ public class LockdownManager extends GlobalConfiguration {
 	}
 
 	public synchronized boolean isLockedDown(Job<?, ?> job) {
-		LockdownStateProperty property = job.getProperty(LockdownStateProperty.class);
-		return property != null && property.getLockedDown() && this.isLockdownPluginEnabled(job);
+		ILockdownState state = this.getLockdownState(job);
+		return state != null && state.getLockedDown() && this.isLockdownPluginEnabled(job);
 	}
 
 	public boolean isLockdownPluginEnabled(Job<?, ?> job) {
@@ -248,18 +297,19 @@ public class LockdownManager extends GlobalConfiguration {
 	}
 
 	public String renderLockdownMessage() {
-		List<LockdownAction> lockdowns = this.getLockdowns();
+		if (this.lockdownMessageTemplate != null) {
+			List<LockdownAction> lockdowns = this.getLockdowns();
 
-		if (!lockdowns.isEmpty()) {
-			StringBuilder jobMessage = new StringBuilder();
+			if (!lockdowns.isEmpty()) {
+				StringBuilder jobMessage = new StringBuilder();
 
-			for (LockdownAction lockdown : lockdowns) {
-				jobMessage.append(this.renderJobMessage(lockdown.getJob(), lockdown));
+				for (LockdownAction lockdown : lockdowns) {
+					jobMessage.append(this.renderJobMessage(lockdown.getJob(), lockdown));
+				}
+
+				return this.lockdownMessageTemplate.replaceAll(getPattern("jobs"), jobMessage.toString());
 			}
-
-			return this.lockdownMessageTemplate.replaceAll(getPattern("jobs"), jobMessage.toString());
 		}
-
 		return "";
 	}
 

@@ -1,0 +1,8 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:t="/lib/hudson">
+  <j:if test="${it.lockdownState.lockedDown}">
+    <div style="margin-left:1em;">
+      <t:summary icon="icon-lock" href="${it.urlName}">${%Status.CurrentlyLockedDown}</t:summary>
+    </div>
+  </j:if>
+</j:jelly>

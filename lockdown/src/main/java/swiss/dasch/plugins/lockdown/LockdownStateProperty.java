@@ -10,48 +10,42 @@ import hudson.model.JobProperty;
 import hudson.model.JobPropertyDescriptor;
 
 @ExportedBean(defaultVisibility = 4)
-public class LockdownStateProperty extends JobProperty<Job<?, ?>> {
-
-	private boolean lockedDown;
-	private String lockdownReason;
-	private String userId;
-	private String userName;
+public class LockdownStateProperty extends JobProperty<Job<?, ?>> implements ILockdownState {
 
 	@DataBoundConstructor
 	public LockdownStateProperty() {
 	}
 
+	private ILockdownState getLockdownState() {
+		return this.owner != null ? LockdownManager.get().getLockdownState(this.owner) : null;
+	}
+
 	@Exported
+	@Override
 	public boolean getLockedDown() {
-		return this.lockedDown;
-	}
-
-	public void setLockedDown(boolean lockedDown) {
-		this.lockedDown = lockedDown;
+		ILockdownState state = this.getLockdownState();
+		return state != null ? state.getLockedDown() : false;
 	}
 
 	@Exported
+	@Override
 	public String getLockdownReason() {
-		return this.lockdownReason;
-	}
-
-	public void setLockdownReason(String reason) {
-		this.lockdownReason = reason;
+		ILockdownState state = this.getLockdownState();
+		return state != null ? state.getLockdownReason() : null;
 	}
 
 	@Exported
+	@Override
 	public String getLockedDownByUserId() {
-		return this.userId;
+		ILockdownState state = this.getLockdownState();
+		return state != null ? state.getLockedDownByUserId() : null;
 	}
 
 	@Exported
+	@Override
 	public String getLockedDownByUserName() {
-		return this.userName;
-	}
-
-	public void setLockedDownByUser(String userId, String userName) {
-		this.userId = userId;
-		this.userName = userName;
+		ILockdownState state = this.getLockdownState();
+		return state != null ? state.getLockedDownByUserName() : null;
 	}
 
 	@Extension
