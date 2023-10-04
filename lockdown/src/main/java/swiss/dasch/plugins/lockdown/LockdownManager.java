@@ -186,12 +186,6 @@ public class LockdownManager extends GlobalConfiguration {
 			state.setLockdownReason(reason);
 			state.setLockedDownByUser(userId, userName);
 
-			try {
-				job.save();
-			} catch (IOException e) {
-				LOGGER.log(Level.SEVERE, "Failed saving job.", e);
-			}
-
 			this.save();
 
 			LockdownStateListener.all().forEach(l -> l.onLockdownStateChanged(job, true));
@@ -212,19 +206,14 @@ public class LockdownManager extends GlobalConfiguration {
 		LockdownState state = this.getOrCreateLockdownState(job, false);
 
 		if (state != null && state.getLockedDown() && (!checkForPluginEnabled || this.isLockdownPluginEnabled(job))) {
+			state.setLockedDown(false);
+
 			if (paramJob != null) {
 				try {
 					paramJob.makeDisabled(false);
 				} catch (IOException e) {
 					LOGGER.log(Level.SEVERE, "Failed stopping lockdown because job could not be enabled.", e);
 				}
-			}
-			state.setLockedDown(false);
-
-			try {
-				job.save();
-			} catch (IOException e) {
-				LOGGER.log(Level.SEVERE, "Failed saving job.", e);
 			}
 
 			this.save();
@@ -268,6 +257,25 @@ public class LockdownManager extends GlobalConfiguration {
 		}
 
 		return changed;
+	}
+
+	public void ensureDisabledState(Job<?, ?> job) {
+		if (job instanceof ParameterizedJob) {
+			ParameterizedJob<?, ?> paramJob = (ParameterizedJob<?, ?>) job;
+
+			if (!paramJob.isDisabled()) {
+				ILockdownState state = this.getLockdownState(job);
+
+				if (state != null && state.getLockedDown()) {
+					LOGGER.log(Level.INFO, "Disabling locked down job.");
+					try {
+						paramJob.makeDisabled(true);
+					} catch (IOException e) {
+						LOGGER.log(Level.SEVERE, "Failed disabling locked down job.", e);
+					}
+				}
+			}
+		}
 	}
 
 	public synchronized boolean isLockedDown(Job<?, ?> job) {
