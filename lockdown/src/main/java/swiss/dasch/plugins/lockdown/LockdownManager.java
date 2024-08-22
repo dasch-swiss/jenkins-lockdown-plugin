@@ -94,7 +94,6 @@ public class LockdownManager extends GlobalConfiguration {
 		this.lockdownMessageTemplate = null;
 		this.jobMessageTemplate = null;
 		this.useSystemMessage = true;
-		this.lockdownStates = new HashMap<>();
 	}
 
 	public String getLockdownMessageTemplate() {
