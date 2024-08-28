@@ -20,6 +20,8 @@ import hudson.AbortException;
 import hudson.BulkChange;
 import hudson.Extension;
 import hudson.Util;
+import hudson.markup.EscapedMarkupFormatter;
+import hudson.markup.MarkupFormatter;
 import hudson.model.Job;
 import hudson.model.TopLevelItem;
 import hudson.model.User;
@@ -34,6 +36,8 @@ import net.sf.json.JSONObject;
 public class LockdownManager extends GlobalConfiguration {
 
 	private static final Logger LOGGER = Logger.getLogger(LockdownManager.class.getName());
+
+	private static final MarkupFormatter FORMATTER = new EscapedMarkupFormatter();
 
 	private String lockdownMessageTemplate;
 	private String jobMessageTemplate;
@@ -285,7 +289,7 @@ public class LockdownManager extends GlobalConfiguration {
 				.collect(Collectors.toList());
 	}
 
-	public String renderLockdownMessage() {
+	public String renderLockdownMessage() throws IOException {
 		if (this.lockdownMessageTemplate != null) {
 			List<LockdownAction> lockdowns = this.getLockdowns();
 
@@ -302,17 +306,23 @@ public class LockdownManager extends GlobalConfiguration {
 		return "";
 	}
 
-	public String renderJobMessage(Job<?, ?> job, LockdownAction lockdown) {
+	public String renderJobMessage(Job<?, ?> job, LockdownAction lockdown) throws IOException {
 		if (this.jobMessageTemplate != null) {
-			return this.jobMessageTemplate.replaceAll(getPattern("name"), job.getDisplayName())
-					.replaceAll(getPattern("fullname"), job.getFullName())
-					.replaceAll(getPattern("description"), job.getDescription())
+			return this.jobMessageTemplate.replaceAll(getPattern("name"), sanitizeText(job.getDisplayName()))
+					.replaceAll(getPattern("fullname"), sanitizeText(job.getFullName()))
+					.replaceAll(getPattern("description"), sanitizeText(job.getDescription()))
 					.replaceAll(getPattern("url"), job.getAbsoluteUrl())
-					.replaceAll(getPattern("reason"), lockdown.getLockdownState().getLockdownReason())
-					.replaceAll(getPattern("username"), lockdown.getLockdownState().getLockedDownByUserName())
-					.replaceAll(getPattern("userid"), lockdown.getLockdownState().getLockedDownByUserId());
+					.replaceAll(getPattern("reason"), sanitizeText(lockdown.getLockdownState().getLockdownReason()))
+					.replaceAll(getPattern("username"),
+							sanitizeText(lockdown.getLockdownState().getLockedDownByUserName()))
+					.replaceAll(getPattern("userid"),
+							sanitizeText(lockdown.getLockdownState().getLockedDownByUserId()));
 		}
 		return "";
+	}
+
+	private static String sanitizeText(String text) throws IOException {
+		return text != null ? FORMATTER.translate(text) : null;
 	}
 
 	private static String getPattern(String key) {
