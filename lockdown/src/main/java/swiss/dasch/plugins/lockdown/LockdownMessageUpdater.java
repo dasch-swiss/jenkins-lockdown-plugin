@@ -84,7 +84,15 @@ public class LockdownMessageUpdater extends PeriodicWork {
 	}
 
 	private boolean isSystemMessageUnchanged() {
-		return StringUtils.equals(this.lockdownManager.getLastSystemMessage(), Jenkins.get().getSystemMessage());
+		String s1 = this.lockdownManager.getLastSystemMessage();
+		if (s1 != null) {
+			s1 = s1.trim().replaceAll("\r", "");
+		}
+		String s2 = Jenkins.get().getSystemMessage();
+		if (s2 != null) {
+			s2 = s2.trim().replaceAll("\r", "");
+		}
+		return StringUtils.equals(s1, s2);
 	}
 
 }
