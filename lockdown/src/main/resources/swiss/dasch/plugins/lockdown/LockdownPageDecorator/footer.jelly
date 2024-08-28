@@ -1,0 +1,9 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+  <j:if test="${it.hasLockdownMessage()}">
+    <div id="swiss_dasch_plugins_lockdown_message" style="display: none;">
+      <j:out value="${it.lockdownMessage != null ? app.markupFormatter.translate(it.lockdownMessage) : ''}" />
+    </div>
+    <st:adjunct includes="swiss.dasch.plugins.lockdown.LockdownPageDecorator.lockdown-message"/>
+  </j:if>
+</j:jelly>

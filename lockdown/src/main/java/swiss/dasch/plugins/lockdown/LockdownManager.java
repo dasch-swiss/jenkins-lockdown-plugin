@@ -40,9 +40,7 @@ public class LockdownManager extends GlobalConfiguration {
 	private boolean useSystemMessage;
 
 	// These are not manually configurable but are persisted
-	private String lockdownMessage;
-	private boolean systemMessageSet;
-	private String lastSystemMessage;
+	private String lockdownMessage = "";
 	private Map<String, LockdownState> lockdownStates = new HashMap<>();
 
 	public LockdownManager() {
@@ -140,22 +138,6 @@ public class LockdownManager extends GlobalConfiguration {
 
 	public void setLockdownMessage(String message) {
 		this.lockdownMessage = message;
-	}
-
-	public boolean getSystemMessageSet() {
-		return this.systemMessageSet;
-	}
-
-	public void setSystemMessageSet(boolean set) {
-		this.systemMessageSet = set;
-	}
-
-	public String getLastSystemMessage() {
-		return this.lastSystemMessage;
-	}
-
-	public void setLastSystemMessage(String message) {
-		this.lastSystemMessage = message;
 	}
 
 	public boolean startLockdown(Job<?, ?> job, String userId, String reason) {

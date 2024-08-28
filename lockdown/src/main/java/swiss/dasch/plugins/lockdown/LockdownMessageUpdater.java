@@ -3,7 +3,6 @@ package swiss.dasch.plugins.lockdown;
 import hudson.Extension;
 import hudson.model.PeriodicWork;
 import io.jenkins.cli.shaded.org.apache.commons.lang.StringUtils;
-import jenkins.model.Jenkins;
 
 @Extension
 public class LockdownMessageUpdater extends PeriodicWork {
@@ -21,27 +20,12 @@ public class LockdownMessageUpdater extends PeriodicWork {
 
 	@Override
 	protected void doRun() throws Exception {
-		Jenkins jenkins = Jenkins.get();
 		boolean hasLockdowns = this.lockdownManager.hasLockdowns();
 
 		boolean save = false;
 
 		if (hasLockdowns) {
 			String newLockdownMessage = this.lockdownManager.renderLockdownMessage();
-
-			if (this.lockdownManager.getUseSystemMessage()) {
-				boolean shouldUpdateSystemMessage = !this.lockdownManager.getSystemMessageSet()
-						|| !StringUtils.equals(jenkins.getSystemMessage(), newLockdownMessage);
-
-				if (this.canUpdateSystemMessage() && shouldUpdateSystemMessage) {
-					jenkins.setSystemMessage(newLockdownMessage);
-
-					this.lockdownManager.setLastSystemMessage(newLockdownMessage);
-					this.lockdownManager.setSystemMessageSet(true);
-
-					save = true;
-				}
-			}
 
 			if (!StringUtils.equals(this.lockdownManager.getLockdownMessage(), newLockdownMessage)) {
 				this.lockdownManager.setLockdownMessage(newLockdownMessage);
@@ -50,49 +34,17 @@ public class LockdownMessageUpdater extends PeriodicWork {
 
 				save = true;
 			}
-		} else {
-			if (this.lockdownManager.getUseSystemMessage() && this.lockdownManager.getSystemMessageSet()
-					&& this.isSystemMessageUnchanged()) {
-				Jenkins.get().setSystemMessage(null);
+		} else if (!StringUtils.equals(this.lockdownManager.getLockdownMessage(), "")) {
+			this.lockdownManager.setLockdownMessage("");
 
-				this.lockdownManager.setLastSystemMessage(null);
-				this.lockdownManager.setSystemMessageSet(false);
+			LockdownMessageListener.all().forEach(l -> l.onLockdownMessageChanged());
 
-				save = true;
-			}
-
-			if (this.lockdownManager.getLockdownMessage() != null) {
-				this.lockdownManager.setLockdownMessage(null);
-
-				LockdownMessageListener.all().forEach(l -> l.onLockdownMessageChanged());
-
-				save = true;
-			}
+			save = true;
 		}
 
 		if (save) {
 			this.lockdownManager.save();
 		}
-	}
-
-	private boolean canUpdateSystemMessage() {
-		// Only set system message if it is empty, or if the current system message
-		// is the same as the lockdowm message set last time. This prevents custom
-		// system messages from being overwritten.
-		return StringUtils.isEmpty(Jenkins.get().getSystemMessage())
-				|| (this.lockdownManager.getSystemMessageSet() && this.isSystemMessageUnchanged());
-	}
-
-	private boolean isSystemMessageUnchanged() {
-		String s1 = this.lockdownManager.getLastSystemMessage();
-		if (s1 != null) {
-			s1 = s1.trim().replaceAll("\r", "");
-		}
-		String s2 = Jenkins.get().getSystemMessage();
-		if (s2 != null) {
-			s2 = s2.trim().replaceAll("\r", "");
-		}
-		return StringUtils.equals(s1, s2);
 	}
 
 }
