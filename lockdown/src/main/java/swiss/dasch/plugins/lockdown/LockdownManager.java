@@ -2,6 +2,7 @@ package swiss.dasch.plugins.lockdown;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -9,6 +10,7 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundSetter;
@@ -19,7 +21,6 @@ import org.kohsuke.stapler.export.ExportedBean;
 import hudson.AbortException;
 import hudson.BulkChange;
 import hudson.Extension;
-import hudson.Util;
 import hudson.markup.EscapedMarkupFormatter;
 import hudson.markup.MarkupFormatter;
 import hudson.model.Job;
@@ -77,7 +78,7 @@ public class LockdownManager extends GlobalConfiguration {
 		while (it.hasNext()) {
 			String job = it.next();
 
-			TopLevelItem item = jenkins.getItem(job);
+			TopLevelItem item = jenkins.getItemByFullName(job, TopLevelItem.class);
 
 			if (item instanceof Job == false) {
 				it.remove();
@@ -274,19 +275,23 @@ public class LockdownManager extends GlobalConfiguration {
 	}
 
 	@Exported
-	public boolean hasLockdowns() {
-		return Util.createSubList(Jenkins.get().getItems(), Job.class).stream()
-				.map(p -> p.getAction(LockdownAction.class)).filter(a -> a != null
-						&& a.getLockdownState().getLockedDown() && this.isLockdownPluginEnabled(a.getJob()))
-				.findAny().isPresent();
+	public synchronized boolean hasLockdowns() {
+		return this.getLockdownsStream().findAny().isPresent();
 	}
 
 	@Exported
-	public List<LockdownAction> getLockdowns() {
-		return Util.createSubList(Jenkins.get().getItems(), Job.class).stream()
-				.map(p -> p.getAction(LockdownAction.class)).filter(a -> a != null
-						&& a.getLockdownState().getLockedDown() && this.isLockdownPluginEnabled(a.getJob()))
-				.collect(Collectors.toList());
+	public synchronized List<LockdownAction> getLockdowns() {
+		List<LockdownAction> lockdowns = this.getLockdownsStream().collect(Collectors.toList());
+		lockdowns.sort(Comparator.comparing((LockdownAction action) -> action.getJob().getFullName()));
+		return lockdowns;
+	}
+
+	private Stream<LockdownAction> getLockdownsStream() {
+		final Jenkins jenkins = Jenkins.get();
+		return this.lockdownStates.entrySet().stream()
+				.map(entry -> entry.getValue().getLockedDown() ? jenkins.getItemByFullName(entry.getKey()) : null)
+				.filter(item -> item instanceof Job).map(item -> ((Job<?, ?>) item).getAction(LockdownAction.class))
+				.filter(action -> action != null && this.isLockdownPluginEnabled(action.getJob()));
 	}
 
 	public String renderLockdownMessage() throws IOException {
