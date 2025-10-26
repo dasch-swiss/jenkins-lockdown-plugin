@@ -1,8 +1,9 @@
 package swiss.dasch.plugins.lockdown;
 
+import java.util.Objects;
+
 import hudson.Extension;
 import hudson.model.PeriodicWork;
-import io.jenkins.cli.shaded.org.apache.commons.lang.StringUtils;
 
 @Extension
 public class LockdownMessageUpdater extends PeriodicWork {
@@ -23,14 +24,14 @@ public class LockdownMessageUpdater extends PeriodicWork {
 		if (hasLockdowns) {
 			String newLockdownMessage = manager.renderLockdownMessage();
 
-			if (!StringUtils.equals(manager.getLockdownMessage(), newLockdownMessage)) {
+			if (!Objects.equals(manager.getLockdownMessage(), newLockdownMessage)) {
 				manager.setLockdownMessage(newLockdownMessage);
 
 				LockdownMessageListener.all().forEach(l -> l.onLockdownMessageChanged());
 
 				save = true;
 			}
-		} else if (!StringUtils.equals(manager.getLockdownMessage(), "")) {
+		} else if (!Objects.equals(manager.getLockdownMessage(), "")) {
 			manager.setLockdownMessage("");
 
 			LockdownMessageListener.all().forEach(l -> l.onLockdownMessageChanged());
