@@ -6,12 +6,6 @@ import hudson.model.PeriodicWork;
 @Extension
 public class LockdownCleanupUpdater extends PeriodicWork {
 
-	private transient LockdownManager lockdownManager;
-
-	public LockdownCleanupUpdater() {
-		this.lockdownManager = LockdownManager.get();
-	}
-
 	@Override
 	public long getRecurrencePeriod() {
 		return 10000;
@@ -19,7 +13,7 @@ public class LockdownCleanupUpdater extends PeriodicWork {
 
 	@Override
 	protected void doRun() throws Exception {
-		this.lockdownManager.deleteStaleLockdownStates();
+		LockdownManager.get().deleteStaleLockdownStates();
 	}
 
 }

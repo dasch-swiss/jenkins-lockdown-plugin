@@ -7,12 +7,6 @@ import io.jenkins.cli.shaded.org.apache.commons.lang.StringUtils;
 @Extension
 public class LockdownMessageUpdater extends PeriodicWork {
 
-	private transient LockdownManager lockdownManager;
-
-	public LockdownMessageUpdater() {
-		this.lockdownManager = LockdownManager.get();
-	}
-
 	@Override
 	public long getRecurrencePeriod() {
 		return 1000;
@@ -20,22 +14,24 @@ public class LockdownMessageUpdater extends PeriodicWork {
 
 	@Override
 	protected void doRun() throws Exception {
-		boolean hasLockdowns = this.lockdownManager.hasLockdowns();
+		LockdownManager manager = LockdownManager.get();
+
+		boolean hasLockdowns = manager.hasLockdowns();
 
 		boolean save = false;
 
 		if (hasLockdowns) {
-			String newLockdownMessage = this.lockdownManager.renderLockdownMessage();
+			String newLockdownMessage = manager.renderLockdownMessage();
 
-			if (!StringUtils.equals(this.lockdownManager.getLockdownMessage(), newLockdownMessage)) {
-				this.lockdownManager.setLockdownMessage(newLockdownMessage);
+			if (!StringUtils.equals(manager.getLockdownMessage(), newLockdownMessage)) {
+				manager.setLockdownMessage(newLockdownMessage);
 
 				LockdownMessageListener.all().forEach(l -> l.onLockdownMessageChanged());
 
 				save = true;
 			}
-		} else if (!StringUtils.equals(this.lockdownManager.getLockdownMessage(), "")) {
-			this.lockdownManager.setLockdownMessage("");
+		} else if (!StringUtils.equals(manager.getLockdownMessage(), "")) {
+			manager.setLockdownMessage("");
 
 			LockdownMessageListener.all().forEach(l -> l.onLockdownMessageChanged());
 
@@ -43,7 +39,7 @@ public class LockdownMessageUpdater extends PeriodicWork {
 		}
 
 		if (save) {
-			this.lockdownManager.save();
+			manager.save();
 		}
 	}
 
