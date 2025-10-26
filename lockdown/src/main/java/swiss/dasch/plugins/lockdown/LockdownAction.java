@@ -93,7 +93,7 @@ public class LockdownAction implements Action {
 
 	@Override
 	public String getIconFileName() {
-		return Jenkins.get().hasPermission(READ) ? "lock.png" : null;
+		return Jenkins.get().hasPermission(READ) ? "symbol-lock-closed" : null;
 	}
 
 	@Override
