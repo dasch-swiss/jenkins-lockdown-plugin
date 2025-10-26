@@ -1,7 +1,7 @@
 package swiss.dasch.plugins.lockdown;
 
-import org.kohsuke.stapler.StaplerRequest;
-import org.kohsuke.stapler.StaplerResponse;
+import org.kohsuke.stapler.StaplerRequest2;
+import org.kohsuke.stapler.StaplerResponse2;
 import org.kohsuke.stapler.verb.GET;
 
 import hudson.Extension;
@@ -14,7 +14,7 @@ import net.sf.json.JSONObject;
 public class LockdownRootAction implements RootAction {
 
 	@GET
-	public void doLockdownMessage(StaplerRequest req, StaplerResponse resp) throws Exception {
+	public void doLockdownMessage(StaplerRequest2 req, StaplerResponse2 resp) throws Exception {
 		Jenkins.get().checkPermission(LockdownPlugin.READ);
 
 		String message = LockdownManager.get().getFormattedLockdownMessage();

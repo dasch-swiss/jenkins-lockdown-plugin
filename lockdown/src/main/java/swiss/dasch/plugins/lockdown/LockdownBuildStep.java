@@ -7,7 +7,7 @@ import java.util.logging.Logger;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
-import org.kohsuke.stapler.StaplerRequest;
+import org.kohsuke.stapler.StaplerRequest2;
 
 import hudson.BulkChange;
 import hudson.Extension;
@@ -67,7 +67,7 @@ public class LockdownBuildStep extends Builder {
 		}
 
 		@Override
-		public boolean configure(StaplerRequest req, JSONObject json) throws FormException {
+		public boolean configure(StaplerRequest2 req, JSONObject json) throws FormException {
 			this.resetProperties();
 
 			try (BulkChange bc = new BulkChange(this)) {

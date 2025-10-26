@@ -14,7 +14,7 @@ import java.util.stream.Stream;
 
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundSetter;
-import org.kohsuke.stapler.StaplerRequest;
+import org.kohsuke.stapler.StaplerRequest2;
 import org.kohsuke.stapler.export.Exported;
 import org.kohsuke.stapler.export.ExportedBean;
 
@@ -335,7 +335,7 @@ public class LockdownManager extends GlobalConfiguration {
 	}
 
 	@Override
-	public boolean configure(StaplerRequest req, JSONObject json) {
+	public boolean configure(StaplerRequest2 req, JSONObject json) {
 		this.resetProperties();
 
 		try (BulkChange bc = new BulkChange(this)) {

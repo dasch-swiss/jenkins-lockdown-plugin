@@ -4,8 +4,8 @@ import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.kohsuke.stapler.StaplerRequest;
-import org.kohsuke.stapler.StaplerResponse;
+import org.kohsuke.stapler.StaplerRequest2;
+import org.kohsuke.stapler.StaplerResponse2;
 import org.kohsuke.stapler.export.Exported;
 import org.kohsuke.stapler.export.ExportedBean;
 import org.kohsuke.stapler.verb.GET;
@@ -54,7 +54,7 @@ public class LockdownAction implements Action {
 	}
 
 	@GET
-	public void doLockdownState(StaplerRequest req, StaplerResponse resp) throws Exception {
+	public void doLockdownState(StaplerRequest2 req, StaplerResponse2 resp) throws Exception {
 		Jenkins.get().checkPermission(READ);
 
 		JSONObject json = new JSONObject();
@@ -67,7 +67,7 @@ public class LockdownAction implements Action {
 	}
 
 	@POST
-	public void doStartLockdown(StaplerRequest req, StaplerResponse resp) throws Exception {
+	public void doStartLockdown(StaplerRequest2 req, StaplerResponse2 resp) throws Exception {
 		Jenkins.get().checkPermission(START_LOCKDOWN);
 
 		String currentUserId = Hudson.getAuthentication2().getName();
@@ -78,7 +78,7 @@ public class LockdownAction implements Action {
 	}
 
 	@POST
-	public void doStopLockdown(StaplerRequest req, StaplerResponse resp) throws Exception {
+	public void doStopLockdown(StaplerRequest2 req, StaplerResponse2 resp) throws Exception {
 		Jenkins.get().checkPermission(STOP_LOCKDOWN);
 
 		LockdownManager.get().stopLockdown(this.job);
